@@ -1,27 +1,21 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Register from './pages/register';
 import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
-// Protected Route: Bina token ke seedha Login par bhejega
+// Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
+  const token = localStorage.getItem('access_token');
+  return token ? children : <Navigate to="/login" replace />;
 };
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
-        {/* Protected Dashboard Route */}
         <Route
           path="/"
           element={
@@ -30,9 +24,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* Catch-all: Koi bhi anjaan URL aaye toh seedha /login par redirect kare */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
