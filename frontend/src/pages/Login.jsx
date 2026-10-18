@@ -5,34 +5,38 @@ import api from '../api/axios';
 function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError('');
+    setErrorMsg('');
     setLoading(true);
 
+    const cleanUsername = username.trim();
+
     try {
-      const response = await api.post('token/', {
-        username: username.trim(),
-        password: password,
+      const res = await api.post('token/', {
+        username: cleanUsername,
+        password: password
       });
 
-      localStorage.setItem('token', response.data.access);
-      if (response.data.refresh) {
-        localStorage.setItem('refreshToken', response.data.refresh);
-      }
-      localStorage.setItem('username', username.trim());
+      // Save token in both keys to prevent 401 on GET requests
+      localStorage.setItem('access_token', res.data.access);
+      localStorage.setItem('token', res.data.access);
+      localStorage.setItem('refresh_token', res.data.refresh);
+      localStorage.setItem('username', cleanUsername);
 
       navigate('/');
     } catch (err) {
-      console.error('Login failed:', err);
-      if (err.response?.data?.detail) {
-        setError(err.response.data.detail);
+      console.error('Login error details:', err.response?.data);
+      if (err.response?.status === 401) {
+        setErrorMsg('Invalid Credentials: Enter your USERNAME (not email).');
+      } else if (!err.response) {
+        setErrorMsg('Cannot connect to backend server. Is Django running?');
       } else {
-        setError('Login failed. Check username and password.');
+        setErrorMsg(`Login Failed: ${JSON.stringify(err.response.data)}`);
       }
     } finally {
       setLoading(false);
@@ -40,115 +44,55 @@ function Login() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#f1f5f9',
-      fontFamily: 'system-ui, sans-serif',
-      padding: '20px'
-    }}>
-      <div style={{
-        backgroundColor: '#ffffff',
-        padding: '36px',
-        borderRadius: '12px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-        width: '100%',
-        maxWidth: '400px'
-      }}>
-        <h2 style={{ margin: '0 0 8px 0', color: '#0f172a', textAlign: 'center', fontSize: '24px' }}>
-          BudgetBuddy Login
-        </h2>
-        <p style={{ margin: '0 0 24px 0', color: '#64748b', textAlign: 'center', fontSize: '14px' }}>
-          Enter your credentials to continue
-        </p>
+    <div style={{ backgroundColor: '#090d16', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: '20px' }}>
+      <div style={{ backgroundColor: '#131b2e', border: '1px solid #1e293b', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '380px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+        <h2 style={{ margin: '0 0 8px', color: '#f8fafc', fontSize: '24px', fontWeight: 'bold' }}>BudgetBuddy Sign In</h2>
+        <p style={{ margin: '0 0 20px', color: '#94a3b8', fontSize: '14px' }}>Enter your credentials to continue</p>
 
-        {error && (
-          <div style={{
-            backgroundColor: '#fee2e2',
-            color: '#b91c1c',
-            padding: '10px',
-            borderRadius: '6px',
-            marginBottom: '16px',
-            fontSize: '13px',
-            textAlign: 'center'
-          }}>
-            {error}
+        {errorMsg && (
+          <div style={{ backgroundColor: '#7f1d1d33', border: '1px solid #ef4444', color: '#fca5a5', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px', lineHeight: '1.4' }}>
+            {errorMsg}
           </div>
         )}
 
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-              Username
-            </label>
+            <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>Username</label>
             <input
               type="text"
               required
-              autoFocus
+              placeholder="e.g. admin"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#f8fafc', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-              Password
-            </label>
+            <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>Password</label>
             <input
               type="password"
               required
+              placeholder="Enter password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#f8fafc', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            style={{
-              backgroundColor: '#2563eb',
-              color: '#ffffff',
-              padding: '12px',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: '15px',
-              marginTop: '8px'
-            }}
+            style={{ backgroundColor: '#2563eb', color: '#fff', padding: '12px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '4px', opacity: loading ? 0.7 : 1 }}
           >
-            {loading ? 'Logging in...' : 'Sign In'}
+            {loading ? 'Verifying...' : 'Sign In'}
           </button>
         </form>
 
-        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '14px', color: '#64748b' }}>
+        <p style={{ margin: '20px 0 0', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>
           Don't have an account?{' '}
-          <Link to="/register" style={{ color: '#2563eb', fontWeight: '600', textDecoration: 'none' }}>
-            Register here
-          </Link>
-        </div>
+          <Link to="/register" style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: '600' }}>Register here</Link>
+        </p>
       </div>
     </div>
   );
