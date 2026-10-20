@@ -3,112 +3,126 @@ import { createPortal } from 'react-dom';
 import { AlertTriangle, Check, FileUp, X } from 'lucide-react';
 import { transactionsAPI } from '../api/api';
 
+const TYPE_OPTIONS = [
+  ['expense', 'Expense'],
+  ['income', 'Income'],
+  ['transfer', 'Transfer'],
+  ['refund', 'Refund'],
+  ['needs_review', 'Needs Review'],
+];
+
 const TransactionCsvImport = ({ onImported }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [rows, setRows] = useState([]);
   const [errors, setErrors] = useState([]);
   const [message, setMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const [action, setAction] = useState(null);
 
-  const resetAndClose = () => {
+  const closeDialog = () => {
+    if (isLoading) return;
     setIsOpen(false);
     setFile(null);
     setPreview(null);
+    setRows([]);
     setErrors([]);
     setMessage(null);
     setIsComplete(false);
-    setAction(null);
   };
 
   const loadPreview = async (selectedFile) => {
     if (!selectedFile) return;
     setIsLoading(true);
-    setAction('preview');
     setPreview(null);
+    setRows([]);
     setErrors([]);
     setMessage(null);
     setIsComplete(false);
     try {
       const response = await transactionsAPI.importCsv(selectedFile, true);
       setPreview(response.data);
+      setRows(response.data.transactions || []);
       setErrors(response.data.errors || []);
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || 'The CSV could not be previewed. Please check the file and try again.',
+        text: error.response?.data?.detail || 'The CSV could not be previewed. Check the file and try again.',
       });
     } finally {
       setIsLoading(false);
-      setAction(null);
     }
   };
 
-  const handleFileChange = (event) => {
-    const selectedFile = event.target.files?.[0] || null;
-    setFile(selectedFile);
-    if (selectedFile) {
-      loadPreview(selectedFile);
-    } else {
-      setPreview(null);
-      setErrors([]);
-      setMessage(null);
-      setIsComplete(false);
-    }
+  const updateRow = (rowNumber, changes) => {
+    setRows((current) => current.map((row) => (
+      row.row === rowNumber ? { ...row, ...changes } : row
+    )));
   };
 
-  const handlePreview = async () => {
-    if (!file) {
-      setMessage({ type: 'error', text: 'Choose a CSV file to preview.' });
-      return;
-    }
-    await loadPreview(file);
+  const handleTypeChange = (row, transactionType) => {
+    updateRow(row.row, {
+      transaction_type: transactionType,
+      category: transactionType === 'expense' ? row.category || 'Uncategorized' : null,
+      income_source: transactionType === 'income' ? row.income_source || 'Other' : null,
+    });
   };
 
   const handleImport = async () => {
-    if (!file || !preview || errors.length || isComplete) return;
+    if (!file || !preview || isComplete) return;
     setIsLoading(true);
-    setAction('import');
     setMessage(null);
     try {
-      const response = await transactionsAPI.importCsv(file);
-      const { imported_count: importedCount, duplicate_count: duplicateCount } = response.data;
+      const decisions = Object.fromEntries(rows.map((row) => [
+        String(row.row),
+        {
+          transaction_type: row.transaction_type,
+          category: row.category,
+          income_source: row.income_source,
+        },
+      ]));
+      const response = await transactionsAPI.importCsv(file, false, decisions);
+      setErrors(response.data.errors || []);
       setMessage({
-        type: 'success',
-        text: `Imported ${importedCount} transaction${importedCount === 1 ? '' : 's'}; skipped ${duplicateCount} duplicate${duplicateCount === 1 ? '' : 's'}.`,
+        type: response.data.failed_count ? 'error' : 'success',
+        text: response.data.message,
       });
       setIsComplete(true);
-      onImported();
+      if (response.data.imported_count > 0) onImported();
     } catch (error) {
-      const responseErrors = error.response?.data?.errors || [];
-      setErrors(responseErrors);
+      setErrors(error.response?.data?.errors || []);
       setMessage({
         type: 'error',
         text: error.response?.data?.detail || 'Transactions could not be imported. Please try again.',
       });
     } finally {
       setIsLoading(false);
-      setAction(null);
     }
   };
 
-  const previewRows = preview?.transactions || [];
+  const setSelectedFile = (event) => {
+    const selectedFile = event.target.files?.[0] || null;
+    setFile(selectedFile);
+    setPreview(null);
+    setRows([]);
+    setErrors([]);
+    setMessage(null);
+    setIsComplete(false);
+    if (selectedFile) loadPreview(selectedFile);
+  };
+
+  const canImport = rows.some((row) => !row.duplicate && row.status !== 'skipped');
 
   return (
     <>
-      <button
-        type="button"
-        className="overview-import-button"
-        onClick={() => setIsOpen(true)}
-      >
-        <FileUp size={14} /> Import Transactions
+      <button type="button" className="overview-import-button" onClick={() => setIsOpen(true)}>
+        <FileUp size={14} /> Import UPI CSV
       </button>
 
       {isOpen && createPortal((
         <div className="modal-overlay" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !isLoading) resetAndClose();
+          if (event.target === event.currentTarget) closeDialog();
         }}>
           <section
             className="modal-card transaction-import-modal"
@@ -118,39 +132,27 @@ const TransactionCsvImport = ({ onImported }) => {
           >
             <header className="modal-header">
               <div>
-                <h3 id="transaction-import-title">Import UPI Transactions</h3>
-                <p>Upload a CSV with Date, Description, Amount, Type, and UPI Reference columns.</p>
+                <h3 id="transaction-import-title">Review UPI transactions</h3>
+                <p>Preview and confirm each transaction before it is added to your account.</p>
               </div>
-              <button
-                type="button"
-                className="btn-close"
-                aria-label="Close import dialog"
-                onClick={resetAndClose}
-                disabled={isLoading}
-              >
+              <button type="button" className="btn-close" aria-label="Close import dialog" onClick={closeDialog} disabled={isLoading}>
                 <X size={18} />
               </button>
             </header>
 
             <div className="transaction-import-content">
               <label className="transaction-import-file">
-                <span>CSV file</span>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleFileChange}
-                  disabled={isLoading}
-                />
+                <span>Statement CSV (up to 5 MB)</span>
+                <input type="file" accept=".csv,text/csv" onChange={setSelectedFile} disabled={isLoading} />
                 {file && <small>{file.name}</small>}
               </label>
 
-              <p className="transaction-import-guidance" role="status">
-                {action === 'preview'
-                  ? 'Checking your CSV and preparing the preview...'
-                  : preview
-                    ? 'Review the preview below, then select Import Transactions to save these records.'
-                    : 'Choose a CSV file to validate it and prepare the transaction preview.'}
-              </p>
+              {isLoading && <p className="transaction-import-guidance" role="status">Reading and validating your statement...</p>}
+              {preview && (
+                <p className="transaction-import-guidance">
+                  Detected encoding: {preview.encoding}. Transfers, refunds, uncertain direction, and unclear purpose need review.
+                </p>
+              )}
 
               {message && (
                 <div className={`alert alert-${message.type}`} role={message.type === 'error' ? 'alert' : 'status'}>
@@ -161,7 +163,7 @@ const TransactionCsvImport = ({ onImported }) => {
 
               {errors.length > 0 && (
                 <div className="transaction-import-errors" role="alert">
-                  <strong>{errors.length} invalid row{errors.length === 1 ? '' : 's'}</strong>
+                  <strong>{errors.length} row(s) need correction</strong>
                   <ul>
                     {errors.slice(0, 10).map((error) => (
                       <li key={`${error.row}-${error.message}`}>Row {error.row}: {error.message}</li>
@@ -174,8 +176,8 @@ const TransactionCsvImport = ({ onImported }) => {
               {preview && (
                 <div className="transaction-import-preview">
                   <div className="transaction-import-summary">
-                    <strong>CSV preview</strong>
-                    <span>{preview.importable_count} ready · {preview.duplicate_count} duplicate{preview.duplicate_count === 1 ? '' : 's'}</span>
+                    <strong>Statement preview</strong>
+                    <span>{preview.importable_count} likely ready · {preview.needs_review_count} need review · {preview.duplicate_count} duplicate</span>
                   </div>
                   <div className="transaction-import-table-wrap">
                     <table>
@@ -184,49 +186,78 @@ const TransactionCsvImport = ({ onImported }) => {
                           <th>Date</th>
                           <th>Description</th>
                           <th>Amount</th>
-                          <th>Type / Category</th>
-                          <th>UPI Reference</th>
+                          <th>Transaction type</th>
+                          <th>Category / Source</th>
                           <th>Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {previewRows.slice(0, 100).map((row) => (
-                          <tr key={`${row.row}-${row.upi_reference}`}>
-                            <td>{row.date}</td>
-                            <td>{row.description}</td>
-                            <td>₹{Number(row.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                            <td>{row.type === 'credit' ? 'Income' : row.category}</td>
-                            <td>{row.upi_reference || '—'}</td>
-                            <td>{row.duplicate ? 'Duplicate' : 'Ready'}</td>
-                          </tr>
-                        ))}
+                        {rows.map((row) => {
+                          const rowLocked = row.duplicate || row.status === 'skipped' || isComplete;
+                          return (
+                            <tr key={row.row}>
+                              <td>{row.date}</td>
+                              <td title={row.description}>{row.description}</td>
+                              <td>₹{Number(row.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                              <td>
+                                <select
+                                  aria-label={`Transaction type for row ${row.row}`}
+                                  value={row.transaction_type}
+                                  disabled={rowLocked || isLoading}
+                                  onChange={(event) => handleTypeChange(row, event.target.value)}
+                                >
+                                  {TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                </select>
+                              </td>
+                              <td>
+                                {row.transaction_type === 'expense' ? (
+                                  <select
+                                    aria-label={`Expense category for row ${row.row}`}
+                                    value={row.category || ''}
+                                    disabled={rowLocked || isLoading}
+                                    onChange={(event) => updateRow(row.row, { category: event.target.value })}
+                                  >
+                                    <option value="">Choose category</option>
+                                    {(preview.category_choices || []).map((choice) => (
+                                      <option key={choice.value} value={choice.value}>{choice.label}</option>
+                                    ))}
+                                  </select>
+                                ) : row.transaction_type === 'income' ? (
+                                  <select
+                                    aria-label={`Income source for row ${row.row}`}
+                                    value={row.income_source || ''}
+                                    disabled={rowLocked || isLoading}
+                                    onChange={(event) => updateRow(row.row, { income_source: event.target.value })}
+                                  >
+                                    <option value="">Choose source</option>
+                                    {(preview.income_sources || []).map((source) => (
+                                      <option key={source.value} value={source.value}>{source.label}</option>
+                                    ))}
+                                  </select>
+                                ) : '—'}
+                              </td>
+                              <td>
+                                {row.duplicate ? 'Duplicate' : row.status === 'skipped' ? 'Not completed' : row.transaction_type === 'needs_review' ? (
+                                  <span title={row.review_message}>Needs Review</span>
+                                ) : row.status === 'needs_review' ? 'Reviewed' : row.transaction_type === 'transfer' || row.transaction_type === 'refund' ? row.transaction_type : 'Ready'}
+                                {row.review_message && !row.duplicate && <small className="transaction-import-row-note">{row.review_message}</small>}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
-                    {previewRows.length > 100 && (
-                      <p className="transaction-import-note">Showing the first 100 of {previewRows.length} rows.</p>
-                    )}
+                    {rows.length > 100 && <p className="transaction-import-note">Showing all {rows.length} rows.</p>}
                   </div>
                 </div>
               )}
 
               <footer className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={resetAndClose} disabled={isLoading}>
+                <button type="button" className="btn-secondary" onClick={closeDialog} disabled={isLoading}>
                   {isComplete ? 'Done' : 'Cancel'}
                 </button>
-                <button type="button" className="btn-secondary" onClick={handlePreview} disabled={!file || isLoading}>
-                  {action === 'preview' ? 'Preparing preview...' : 'Preview CSV'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleImport}
-                  disabled={!preview || errors.length > 0 || isLoading || isComplete || preview.importable_count === 0}
-                >
-                  {action === 'import'
-                    ? 'Importing...'
-                    : preview?.importable_count === 0
-                      ? 'No New Transactions'
-                      : 'Import Transactions'}
+                <button type="button" className="btn-primary" onClick={handleImport} disabled={!preview || !canImport || isLoading || isComplete}>
+                  {isLoading ? 'Importing...' : 'Confirm and Import'}
                 </button>
               </footer>
             </div>

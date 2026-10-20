@@ -1,7 +1,8 @@
 from datetime import date
 from decimal import Decimal
-from django.db import transaction
+import json
 from django.db.models import Sum
+from django.db import IntegrityError, transaction
 from django.db import connection
 from django.http import Http404, HttpResponse
 from rest_framework.views import APIView
@@ -24,11 +25,7 @@ from .reports import (
     generate_report_excel_content,
     generate_report_pdf_content,
 )
-from .upi_import import (
-    mark_duplicate_transactions,
-    parse_upi_csv,
-    serialize_preview,
-)
+from .upi_import import mark_duplicate_transactions, parse_upi_csv, serialize_preview
 from .serializers import (
     CustomTokenObtainPairSerializer,
     ExpenseSerializer,
@@ -226,9 +223,8 @@ class UPITransactionImportView(APIView):
                 {'detail': 'Upload a CSV file using the "file" field.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         try:
-            transactions, errors = parse_upi_csv(uploaded_file)
+            transactions, errors, encoding = parse_upi_csv(uploaded_file)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -238,62 +234,148 @@ class UPITransactionImportView(APIView):
             return Response({
                 'transactions': preview,
                 'errors': errors,
-                'importable_count': sum(not item['duplicate'] for item in transactions),
+                'encoding': encoding,
+                'category_choices': [
+                    {'value': value, 'label': label}
+                    for value, label in Expense.CATEGORY_CHOICES
+                ],
+                'income_sources': [
+                    {'value': value, 'label': label}
+                    for value, label in Income.SOURCE_CHOICES
+                ],
+                'importable_count': sum(
+                    not item['duplicate']
+                    and item['transaction_status'] != 'skipped'
+                    and item['transaction_type'] in {'expense', 'income'}
+                    for item in transactions
+                ),
                 'duplicate_count': sum(item['duplicate'] for item in transactions),
+                'needs_review_count': sum(
+                    item['transaction_status'] == 'needs_review'
+                    for item in transactions
+                ),
             })
 
-        if errors:
-            return Response({
-                'detail': 'Fix the invalid CSV rows before importing.',
-                'errors': errors,
-                'transactions': preview,
-            }, status=status.HTTP_400_BAD_REQUEST)
+        raw_decisions = request.data.get('decisions', '')
+        try:
+            decisions = json.loads(raw_decisions) if raw_decisions else {}
+        except (TypeError, json.JSONDecodeError):
+            return Response(
+                {'detail': 'Transaction decisions must be valid JSON.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(decisions, dict):
+            return Response(
+                {'detail': 'Transaction decisions must be a JSON object keyed by CSV row number.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        expense_categories = {choice[0] for choice in Expense.CATEGORY_CHOICES}
+        income_sources = {choice[0] for choice in Income.SOURCE_CHOICES}
         imported_count = 0
+        skipped_count = 0
         duplicate_count = 0
-        with transaction.atomic():
-            for item in transactions:
-                if item['duplicate']:
-                    duplicate_count += 1
-                    continue
+        failed_rows = list(errors)
 
-                _, created = ImportedTransactionIdentity.objects.get_or_create(
-                    user=request.user,
-                    identity_key=item['identity_key'],
-                )
-                if not created:
-                    duplicate_count += 1
-                    continue
+        for item in transactions:
+            if item['duplicate']:
+                duplicate_count += 1
+                continue
+            if item['transaction_status'] == 'skipped':
+                skipped_count += 1
+                continue
 
-                if item['type'] == 'credit':
-                    Income.objects.create(
-                        user=request.user,
-                        source='Other',
-                        description=item['description'],
-                        amount=item['amount'],
-                        date=item['date'],
-                        upi_reference=item['upi_reference'],
-                    )
-                else:
-                    expense = Expense.objects.create(
-                        user=request.user,
-                        category=item['category'],
-                        description=item['description'],
-                        amount=item['amount'],
-                        date=item['date'],
-                        upi_reference=item['upi_reference'],
-                    )
-                    check_and_trigger_budget_alert(
-                        user=request.user,
-                        category=expense.category,
-                        expense_date=expense.date,
-                    )
-                imported_count += 1
+            decision = decisions.get(str(item['row']), {})
+            if not isinstance(decision, dict):
+                failed_rows.append({
+                    'row': item['row'],
+                    'message': 'Transaction decision must be an object.',
+                })
+                continue
+            transaction_type = decision.get('transaction_type', item['transaction_type'])
+            category = decision.get('category', item['category'])
+            income_source = decision.get('income_source', item['income_source'])
 
+            if not isinstance(transaction_type, str) or transaction_type not in {
+                'expense', 'income', 'transfer', 'refund', 'needs_review',
+            }:
+                failed_rows.append({
+                    'row': item['row'],
+                    'message': 'Choose a supported transaction type.',
+                })
+                continue
+            if transaction_type in {'transfer', 'refund', 'needs_review'}:
+                skipped_count += 1
+                continue
+            if transaction_type == 'expense' and (
+                not isinstance(category, str) or category not in expense_categories
+            ):
+                failed_rows.append({
+                    'row': item['row'],
+                    'message': 'Choose a valid expense category before importing this row.',
+                })
+                continue
+            if transaction_type == 'income' and (
+                not isinstance(income_source, str) or income_source not in income_sources
+            ):
+                failed_rows.append({
+                    'row': item['row'],
+                    'message': 'Choose a valid income source before importing this row.',
+                })
+                continue
+
+            try:
+                with transaction.atomic():
+                    _, created = ImportedTransactionIdentity.objects.get_or_create(
+                        user=request.user,
+                        identity_key=item['identity_key'],
+                    )
+                    if not created:
+                        duplicate_count += 1
+                        continue
+                    if transaction_type == 'income':
+                        Income.objects.create(
+                            user=request.user,
+                            source=income_source,
+                            description=item['description'],
+                            amount=item['amount'],
+                            date=item['date'],
+                            upi_reference=item['upi_reference'],
+                        )
+                    else:
+                        expense = Expense.objects.create(
+                            user=request.user,
+                            category=category,
+                            description=item['description'],
+                            amount=item['amount'],
+                            date=item['date'],
+                            upi_reference=item['upi_reference'],
+                        )
+                        check_and_trigger_budget_alert(
+                            user=request.user,
+                            category=expense.category,
+                            expense_date=expense.date,
+                        )
+            except IntegrityError:
+                failed_rows.append({
+                    'row': item['row'],
+                    'message': 'The transaction could not be saved because of a data integrity conflict.',
+                })
+                continue
+            imported_count += 1
+
+        failed_count = len(failed_rows)
+        message = (
+            f'Imported {imported_count}; skipped {skipped_count}; '
+            f'duplicates {duplicate_count}; failed {failed_count}.'
+        )
         return Response({
-            'message': f'Imported {imported_count} transaction(s); skipped {duplicate_count} duplicate(s).',
+            'message': message,
             'imported_count': imported_count,
+            'skipped_count': skipped_count,
             'duplicate_count': duplicate_count,
+            'failed_count': failed_count,
+            'errors': failed_rows,
         }, status=status.HTTP_200_OK)
 
 

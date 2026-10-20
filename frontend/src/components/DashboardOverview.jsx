@@ -277,6 +277,15 @@ const DashboardOverview = ({
                       <span className="transaction-info">
                         <strong>{transaction.title}</strong>
                         <small>{transaction.description || transaction.category || transaction.source || 'Transaction'} · {formatDate(transaction.date)}</small>
+                        {transaction.type === 'expense' ? (
+                          <span className={`category-badge cat-${transaction.category?.toLowerCase()}`}>
+                            {transaction.category}
+                          </span>
+                        ) : (
+                          <span className={`category-badge src-${transaction.source?.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {transaction.source}
+                          </span>
+                        )}
                       </span>
                       <strong className={`transaction-amount ${transaction.type}`}>
                         {transaction.type === 'income' ? '+' : '-'}{currency(transaction.raw_amount)}

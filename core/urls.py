@@ -54,5 +54,3 @@ urlpatterns = [
     path('reports/<int:pk>/', ReportDetailView.as_view(), name='report-detail'),
     path('reports/<int:pk>/export/', ReportExportView.as_view(), name='report-export'),
 ]
-
-

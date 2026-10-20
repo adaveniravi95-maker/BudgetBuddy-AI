@@ -1,33 +1,52 @@
 # UPI transaction CSV import
 
-The authenticated endpoint `POST /api/transactions/import/` accepts a multipart
-form upload in the `file` field. Use `?preview=true` to validate the CSV and
-return a preview without saving transactions. The dashboard uses this preview
-before the user confirms an import.
+The authenticated dashboard importer previews a CSV before saving. It supports
+comma-, semicolon-, tab-, and pipe-delimited statements and recognizes common
+header aliases for transaction date, description/merchant, amount, direction,
+reference, and status. Unrecognized or incomplete headers are rejected with a
+description of the missing fields.
 
-The CSV must be UTF-8 (a UTF-8 BOM is supported), no larger than 5 MB, and
-contain no more than 10,000 transaction rows. Its header must identify these
-columns:
+The parser detects UTF-8 (with or without BOM), UTF-16 LE/BE (with BOM or
+recognizable byte order), UTF-32 BOM files, and falls back to Windows-1252 and
+Latin-1 for legacy exports. Files are limited to 5 MB and 10,000 rows and must
+have a `.csv` extension. Date/time values are stored using their calendar date;
+timezone conversion is not applied.
 
-| Field | Accepted header names |
-| --- | --- |
-| Date | `Date`, `Transaction Date`, `Txn Date`, `Value Date` |
-| Description | `Description`, `Details`, `Transaction Details`, `Narration`, `Remarks`, `Particulars` |
-| Amount | `Amount`, `Transaction Amount`, `Txn Amount` |
-| Type | `Type`, `Transaction Type`, `Txn Type`, `Dr/Cr`, `Debit/Credit` |
-| UPI Reference | `UPI Reference`, `UPI Ref`, `UPI Ref No`, `UPI Reference ID`, `UPI Reference Number`, `UPI Transaction ID`, `Reference Number`, `Reference No`, `Ref No`, `Transaction ID`, `Transaction Reference`, `Txn Reference`, `Txn ID`, `Bank Reference Number`, `UTR`, `RRN` |
+Direction is taken from a Debit/Credit/DR/CR column, an explicit sign on a
+signed amount, or exactly one populated debit/credit amount column. A positive,
+unsigned amount with no direction is held for review instead of being guessed.
+Rows with failed/cancelled/rejected statuses are never imported. Other unknown
+statuses and unclear descriptions are shown as needing review.
 
-Header matching ignores case, spaces, and punctuation. Dates in ISO
-(`YYYY-MM-DD`), day-first (`DD/MM/YYYY`, `DD-MM-YYYY`), and US
-(`MM/DD/YYYY`) formats are supported. Amounts may contain a rupee/INR marker
-and grouping commas and must be positive with no more than two decimal places.
-Type accepts Credit/Debit and the common CR/DR abbreviations. The UPI
-Reference column is required, though an individual reference value may be
-empty.
+Known merchants are categorized with local rules in `core/upi_import.py`.
+Unknown expenses have no suggested category and require a user selection before
+save (the existing `Uncategorized` category is available). Salary and
+scholarship descriptions are suggested as income sources, but unclear credits,
+refunds, and suspected own-account transfers are not counted as income. Users
+can select Expense/Income and a corresponding category/source before saving.
+Transfers, refunds, and unresolved rows are skipped unless the user explicitly
+changes the classification in the preview.
 
-Credits are saved as income with source `Other`. Debits are categorized from
-their description as Food, Travel, Shopping, Education, Entertainment, or
-Miscellaneous (the fallback). Invalid rows reject the whole import; duplicate
-transactions are skipped. A non-empty UPI reference is the primary
-per-user duplicate key. Rows without a reference use transaction type, date,
-amount, and description as their duplicate identity.
+Rows are saved to the existing per-user `Expense` and `Income` models. A
+per-user unique identity uses the statement reference when present and a
+direction/date/amount/normalized-description fingerprint otherwise, making
+retries idempotent. Valid rows can be imported while invalid rows are returned
+as failures. Other UPI provider layouts may need additional header aliases or
+date formats; no provider format is claimed as supported until validated with
+an actual statement.
+
+## Try it locally
+
+Create a UTF-8 `sample-upi.csv`:
+
+```csv
+Date,Description,Amount,Type,UPI Reference,Status
+2026-10-01,Paid to LAALUS CAFE AND FOOD COURT,245.00,Debit,sample-food-1,Completed
+2026-10-02,Monthly Salary,12000.00,Credit,sample-salary-1,Success
+2026-10-03,Paid to unknown merchant,50.00,Debit,sample-review-1,Completed
+```
+
+Open the Dashboard, select **Import UPI CSV**, review/edit the suggested types
+and categories, then choose **Confirm and Import**. The first row is suggested
+as Food; the salary credit is suggested as Salary income; the unknown merchant
+requires review. Re-uploading the file reports the saved rows as duplicates.

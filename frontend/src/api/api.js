@@ -92,9 +92,10 @@ export const dashboardAPI = {
 };
 
 export const transactionsAPI = {
-  importCsv: (file, preview = false) => {
+  importCsv: (file, preview = false, decisions = null) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (decisions) formData.append('decisions', JSON.stringify(decisions));
     return api.post('/transactions/import/', formData, {
       params: preview ? { preview: 'true' } : undefined,
       headers: { 'Content-Type': 'multipart/form-data' },

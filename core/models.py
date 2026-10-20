@@ -102,6 +102,7 @@ class Expense(models.Model):
         ('Education', 'Education'),
         ('Entertainment', 'Entertainment'),
         ('Miscellaneous', 'Miscellaneous'),
+        ('Uncategorized', 'Uncategorized'),
     ]
 
     user = models.ForeignKey(
@@ -156,7 +157,6 @@ class ImportedTransactionIdentity(models.Model):
                 name='unique_imported_transaction_identity',
             ),
         ]
-
 
 
 # ============================================================

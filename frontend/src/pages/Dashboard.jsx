@@ -54,6 +54,7 @@ const CATEGORIES = [
   'Education',
   'Entertainment',
   'Miscellaneous',
+  'Uncategorized',
 ];
 
 const CATEGORY_COLORS = {
@@ -63,6 +64,7 @@ const CATEGORY_COLORS = {
   Education: '#6366f1',
   Entertainment: '#ec4899',
   Miscellaneous: '#64748b',
+  Uncategorized: '#64748b',
 };
 
 const INCOME_SOURCES = [

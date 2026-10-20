@@ -17,7 +17,6 @@ class HealthCheckTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, {'status': 'ok'})
 
-
 class RegistrationTests(APITestCase):
     def test_successful_registration(self):
         """Test registration creates user with hashed password and default student profile"""
@@ -2866,4 +2865,3 @@ class AnalyticsAndReportingTests(APITestCase):
         self.assertEqual(self.client.get('/api/analytics/trends/').status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(self.client.get('/api/reports/').status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(self.client.post('/api/reports/generate/', {}).status_code, status.HTTP_401_UNAUTHORIZED)
-
