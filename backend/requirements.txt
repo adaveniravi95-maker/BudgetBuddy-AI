@@ -1,3 +1,17 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic[email]
+pydantic-settings
+python-dotenv
+bcrypt
+openpyxl
+reportlab
+pytest
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
 sqlalchemy==2.0.43

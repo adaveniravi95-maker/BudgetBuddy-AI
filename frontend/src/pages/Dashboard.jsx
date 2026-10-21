@@ -1,3 +1,810 @@
+import { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { expenseAPI, incomeAPI, transactionAPI, budgetAPI, savingsAPI, notificationAPI, reportAPI } from '../services/api';
+import AnalyticsSection from '../components/analytics/AnalyticsSection';
+import {
+  EXPENSE_CATEGORIES, INCOME_SOURCES, EXPENSE_COLORS, INCOME_COLORS,
+  MONTHS, currentMonth, currentYear,
+} from '../constants/finance';
+
+const today = () => new Date().toISOString().split('T')[0];
+const emptyExpense = { amount: '', category: 'food', description: '', date: today() };
+const emptyIncome = { amount: '', source: 'pocket_money', description: '', date: today() };
+
+const NAV = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'budget', label: 'Budgets' },
+  { id: 'savings', label: 'Savings' },
+  { id: 'income', label: 'Income' },
+  { id: 'expenses', label: 'Expenses' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'reports', label: 'Reports' },
+];
+
+function RecentActivity() {
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    transactionAPI.list({}).then((r) => setTransactions(r.data.transactions.slice(0, 5))).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return (
+    <div className="section-card">
+      <div className="section-header"><span className="section-title"><span className="section-title-mark" /> Recent Activity</span></div>
+      {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 48, marginBottom: 8, borderRadius: 10 }} />)}
+    </div>
+  );
+  if (!transactions.length) return null;
+
+  return (
+    <div className="section-card anim-fadeInUp">
+      <div className="section-header">
+        <span className="section-title"><span className="section-title-mark" /> Recent Activity</span>
+      </div>
+      <div className="transaction-list">
+        {transactions.map((tx) => (
+          <div key={tx.type + '-' + tx.id} className="transaction-item">
+            <div className={`transaction-dot ${tx.type}`} />
+            <div className="transaction-details">
+              <span className="transaction-desc">{tx.description || tx.category}</span>
+              <span className="transaction-meta">{tx.category.replace('_', ' ')} &middot; {tx.date}</span>
+            </div>
+            <span className={tx.type === 'income' ? 'amount-income' : 'amount-expense'}>
+              {tx.type === 'income' ? '+' : '-'} INR {tx.amount.toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [msg, setMsg] = useState({ type: '', text: '' });
+  const [section, setSection] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [summary, setSummary] = useState({ total_income: 0, total_expenses: 0, balance: 0, income_count: 0, expense_count: 0 });
+
+  const [expenses, setExpenses] = useState([]);
+  const [expLoading, setExpLoading] = useState(true);
+  const [filterExpCat, setFilterExpCat] = useState('');
+  const [showExpForm, setShowExpForm] = useState(false);
+  const [expCreate, setExpCreate] = useState({ ...emptyExpense });
+  const [creatingExp, setCreatingExp] = useState(false);
+  const [editExpId, setEditExpId] = useState(null);
+  const [editExpData, setEditExpData] = useState({ ...emptyExpense });
+  const [editingExp, setEditingExp] = useState(false);
+
+  const [incomes, setIncomes] = useState([]);
+  const [incLoading, setIncLoading] = useState(true);
+  const [filterIncSrc, setFilterIncSrc] = useState('');
+  const [showIncForm, setShowIncForm] = useState(false);
+  const [incCreate, setIncCreate] = useState({ ...emptyIncome });
+  const [creatingInc, setCreatingInc] = useState(false);
+  const [editIncId, setEditIncId] = useState(null);
+  const [editIncData, setEditIncData] = useState({ ...emptyIncome });
+  const [editingInc, setEditingInc] = useState(false);
+
+  const [budgets, setBudgets] = useState([]);
+  const [budgetLoading, setBudgetLoading] = useState(true);
+  const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [budgetCreate, setBudgetCreate] = useState({
+    month: currentMonth(), year: currentYear(), total_amount: '',
+    allocations: EXPENSE_CATEGORIES.map((c) => ({ category: c.value, amount: '' })),
+  });
+  const [creatingBudget, setCreatingBudget] = useState(false);
+  const [selectedBudget, setSelectedBudget] = useState(null);
+
+  const [savingsGoals, setSavingsGoals] = useState([]);
+  const [savingsLoading, setSavingsLoading] = useState(true);
+  const [showSavingsForm, setShowSavingsForm] = useState(false);
+  const [savingsCreate, setSavingsCreate] = useState({ name: '', target_amount: '' });
+  const [creatingSavings, setCreatingSavings] = useState(false);
+  const [editSavingsId, setEditSavingsId] = useState(null);
+  const [editSavingsData, setEditSavingsData] = useState({ name: '', target_amount: '' });
+  const [editingSavings, setEditingSavings] = useState(false);
+  const [progressGoalId, setProgressGoalId] = useState(null);
+  const [progressAmount, setProgressAmount] = useState('');
+
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  const [reportMonth, setReportMonth] = useState(currentMonth());
+  const [reportYear, setReportYear] = useState(currentYear());
+  const [reportData, setReportData] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [downloading, setDownloading] = useState('');
+  const [reportError, setReportError] = useState('');
+
+  const notify = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg({ type: '', text: '' }), 3000); };
+
+  const fetchSummary = async () => { try { const r = await transactionAPI.summary(); setSummary(r.data); } catch {} };
+  const fetchExpenses = async () => {
+    try { setExpLoading(true); const p = filterExpCat ? { category: filterExpCat } : {}; const r = await expenseAPI.list(p); setExpenses(r.data.expenses); } catch {} finally { setExpLoading(false); }
+  };
+  const fetchIncomes = async () => {
+    try { setIncLoading(true); const p = filterIncSrc ? { source: filterIncSrc } : {}; const r = await incomeAPI.list(p); setIncomes(r.data.incomes); } catch {} finally { setIncLoading(false); }
+  };
+  const fetchSavingsGoals = async () => { try { setSavingsLoading(true); const r = await savingsAPI.list(); setSavingsGoals(r.data.goals); } catch {} finally { setSavingsLoading(false); } };
+  const fetchBudgets = async () => {
+    try { setBudgetLoading(true); const r = await budgetAPI.list({}); setBudgets(r.data.budgets); if (r.data.budgets.length && !selectedBudget) setSelectedBudget(r.data.budgets[0]); } catch {} finally { setBudgetLoading(false); }
+  };
+  const fetchNotifications = async () => { try { const r = await notificationAPI.list(); setNotifications(r.data.notifications); setUnreadCount(r.data.unread_count); } catch {} };
+  const markNotifRead = async (id) => { try { await notificationAPI.markRead(id); fetchNotifications(); } catch {} };
+  const markAllNotifsRead = async () => { try { await notificationAPI.markAllRead(); fetchNotifications(); } catch {} };
+
+  const fetchReport = async (m = reportMonth, y = reportYear) => {
+    setReportLoading(true);
+    setReportError('');
+    try {
+      const r = await reportAPI.monthly({ month: m, year: y });
+      setReportData(r.data);
+    } catch (err) {
+      setReportData(null);
+      setReportError(err.response?.data?.detail || 'Failed to load report');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const downloadReport = async (format) => {
+    setDownloading(format);
+    setReportError('');
+    try {
+      const r = await reportAPI.download({ month: reportMonth, year: reportYear, format });
+      const blob = new Blob([r.data]);
+      const url = window.URL.createObjectURL(blob);
+      const ext = format === 'excel' || format === 'xlsx' || format === 'xls' ? 'xlsx' : format;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `budgetbuddy_report_${reportYear}-${String(reportMonth).padStart(2, '0')}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      notify('success', `Report downloaded as ${ext.toUpperCase()}`);
+    } catch (err) {
+      let detail = 'Download failed';
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          detail = JSON.parse(text).detail || detail;
+        } catch {}
+      } else {
+        detail = err.response?.data?.detail || detail;
+      }
+      notify('error', detail);
+    } finally {
+      setDownloading('');
+    }
+  };
+
+  useEffect(() => { fetchSummary(); }, []);
+  useEffect(() => { fetchExpenses(); }, [filterExpCat]);
+  useEffect(() => { fetchIncomes(); }, [filterIncSrc]);
+  useEffect(() => { fetchBudgets(); }, []);
+  useEffect(() => { fetchSavingsGoals(); }, []);
+  useEffect(() => { fetchNotifications(); }, []);
+  useEffect(() => { if (section === 'reports') fetchReport(); }, [section]);
+
+  const handleLogout = () => { logout(); navigate('/login'); };
+
+  /* ── Savings ── */
+  const handleSavingsCreate = async (e) => {
+    e.preventDefault(); setCreatingSavings(true);
+    try { await savingsAPI.create({ name: savingsCreate.name, target_amount: parseFloat(savingsCreate.target_amount) }); setSavingsCreate({ name: '', target_amount: '' }); setShowSavingsForm(false); notify('success', 'Goal created'); fetchSavingsGoals(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setCreatingSavings(false); }
+  };
+  const startEditSavings = (g) => { setEditSavingsId(g.id); setEditSavingsData({ name: g.name, target_amount: String(g.target_amount) }); setShowSavingsForm(false); setProgressGoalId(null); };
+  const handleSavingsUpdate = async (e) => {
+    e.preventDefault(); setEditingSavings(true);
+    try { await savingsAPI.update(editSavingsId, { name: editSavingsData.name, target_amount: parseFloat(editSavingsData.target_amount) }); setEditSavingsId(null); notify('success', 'Updated'); fetchSavingsGoals(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setEditingSavings(false); }
+  };
+  const handleSavingsProgress = async (id) => {
+    try { await savingsAPI.updateProgress(id, { current_saved: parseFloat(progressAmount) }); setProgressGoalId(null); setProgressAmount(''); notify('success', 'Updated'); fetchSavingsGoals(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+  };
+  const handleSavingsDelete = async (id) => {
+    if (!window.confirm('Delete this goal?')) return;
+    try { await savingsAPI.delete(id); notify('success', 'Deleted'); fetchSavingsGoals(); } catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+  };
+
+  /* ── Budget ── */
+  const handleBudgetAllocChange = (i, v) => { const a = [...budgetCreate.allocations]; a[i].amount = v; setBudgetCreate({ ...budgetCreate, allocations: a }); };
+  const handleBudgetCreate = async (e) => {
+    e.preventDefault(); setCreatingBudget(true);
+    try {
+      const a = budgetCreate.allocations.filter((x) => x.amount && parseFloat(x.amount) > 0).map((x) => ({ category: x.category, amount: parseFloat(x.amount) }));
+      await budgetAPI.create({ month: parseInt(budgetCreate.month), year: parseInt(budgetCreate.year), total_amount: a.reduce((s, x) => s + x.amount, 0), allocations: a });
+      setShowBudgetForm(false); setBudgetCreate({ month: currentMonth(), year: currentYear(), total_amount: '', allocations: EXPENSE_CATEGORIES.map((c) => ({ category: c.value, amount: '' })) });
+      notify('success', 'Created'); fetchBudgets();
+    } catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setCreatingBudget(false); }
+  };
+  const handleBudgetDelete = async (id) => {
+    if (!window.confirm('Delete?')) return;
+    try { await budgetAPI.delete(id); if (selectedBudget?.id === id) setSelectedBudget(null); notify('success', 'Deleted'); fetchBudgets(); } catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+  };
+
+  /* ── Expense ── */
+  const handleExpCreateChange = (e) => setExpCreate({ ...expCreate, [e.target.name]: e.target.value });
+  const handleExpCreate = async (e) => {
+    e.preventDefault(); setCreatingExp(true);
+    try { await expenseAPI.create({ amount: parseFloat(expCreate.amount), category: expCreate.category, description: expCreate.description, date: expCreate.date }); setExpCreate({ ...emptyExpense }); setShowExpForm(false); notify('success', 'Added'); fetchExpenses(); fetchSummary(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setCreatingExp(false); }
+  };
+  const startEditExp = (e) => { setEditExpId(e.id); setEditExpData({ amount: String(e.amount), category: e.category, description: e.description || '', date: e.date.split('T')[0] }); setShowExpForm(false); };
+  const handleExpUpdate = async (e) => {
+    e.preventDefault(); setEditingExp(true);
+    try { const p = { category: editExpData.category, description: editExpData.description }; const a = parseFloat(editExpData.amount); if (!isNaN(a) && a > 0) p.amount = a; await expenseAPI.update(editExpId, p); setEditExpId(null); notify('success', 'Updated'); fetchExpenses(); fetchSummary(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setEditingExp(false); }
+  };
+  const handleExpDelete = async (id) => {
+    if (!window.confirm('Delete?')) return;
+    try { await expenseAPI.delete(id); notify('success', 'Deleted'); fetchExpenses(); fetchSummary(); } catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+  };
+
+  /* ── Income ── */
+  const handleIncCreateChange = (e) => setIncCreate({ ...incCreate, [e.target.name]: e.target.value });
+  const handleIncCreate = async (e) => {
+    e.preventDefault(); setCreatingInc(true);
+    try { await incomeAPI.create({ amount: parseFloat(incCreate.amount), source: incCreate.source, description: incCreate.description, date: incCreate.date }); setIncCreate({ ...emptyIncome }); setShowIncForm(false); notify('success', 'Added'); fetchIncomes(); fetchSummary(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setCreatingInc(false); }
+  };
+  const startEditInc = (i) => { setEditIncId(i.id); setEditIncData({ amount: String(i.amount), source: i.source, description: i.description || '', date: i.date.split('T')[0] }); setShowIncForm(false); };
+  const handleIncUpdate = async (e) => {
+    e.preventDefault(); setEditingInc(true);
+    try { const p = { source: editIncData.source, description: editIncData.description }; const a = parseFloat(editIncData.amount); if (!isNaN(a) && a > 0) p.amount = a; await incomeAPI.update(editIncId, p); setEditIncId(null); notify('success', 'Updated'); fetchIncomes(); fetchSummary(); }
+    catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+    finally { setEditingInc(false); }
+  };
+  const handleIncDelete = async (id) => {
+    if (!window.confirm('Delete?')) return;
+    try { await incomeAPI.delete(id); notify('success', 'Deleted'); fetchIncomes(); fetchSummary(); } catch (err) { notify('error', err.response?.data?.detail || 'Failed'); }
+  };
+
+  const initials = (user?.first_name?.[0] || user?.username?.[0] || 'U').toUpperCase();
+  const sectionLabel = NAV.find((n) => n.id === section)?.label || 'Overview';
+
+  return (
+    <div className="dashboard-layout">
+      {msg.text && <div className={`toast ${msg.type}`}>{msg.text}</div>}
+      <div className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
+
+      {/* ── Sidebar ── */}
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-mark">B</div>
+          <span className="sidebar-brand-text">BudgetBuddy</span>
+        </div>
+        <nav className="sidebar-nav">
+          <div className="sidebar-section">Menu</div>
+          {NAV.map((n) => (
+            <button key={n.id} className={`sidebar-item ${section === n.id ? 'active' : ''}`}
+              onClick={() => { setSection(n.id); setSidebarOpen(false); }}>
+              {n.label}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">{initials}</div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">{user?.first_name || user?.username}</div>
+              <div className="sidebar-user-email">{user?.email}</div>
+            </div>
+          </div>
+          <button className="sidebar-logout" onClick={handleLogout}>Sign out</button>
+        </div>
+      </aside>
+
+      {/* ── Main ── */}
+      <div className="main-content">
+        <header className="main-header">
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>&#9776;</button>
+          <h1>{sectionLabel}</h1>
+          <div className="main-header-right">
+            <div className="notif-bell-wrapper">
+              <button className="notif-bell" onClick={() => setNotifOpen(!notifOpen)}>
+                &#128276;
+                {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
+              </button>
+              {notifOpen && (
+                <div className="notif-dropdown">
+                  <div className="notif-dropdown-header">
+                    <span>Notifications</span>
+                    {unreadCount > 0 && <button className="notif-mark-all" onClick={markAllNotifsRead}>Mark all read</button>}
+                  </div>
+                  <div className="notif-list">
+                    {notifications.length === 0 ? (
+                      <div className="notif-empty">No notifications</div>
+                    ) : notifications.map((n) => (
+                      <div key={n.id} className={`notif-item ${n.is_read ? '' : 'unread'}`} onClick={() => { if (!n.is_read) markNotifRead(n.id); }}>
+                        <div className={`notif-dot ${n.notification_type}`} />
+                        <div className="notif-content">
+                          <div className="notif-message">{n.message}</div>
+                          <div className="notif-time">{new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </span>
+          </div>
+        </header>
+
+        <div className="main-body">
+          {/* ═══ OVERVIEW ═══ */}
+          {section === 'overview' && (
+            <>
+              <div className="stats-grid anim-fadeInUp">
+                <div className="stat-card is-income">
+                  <div className="stat-indicator income">In</div>
+                  <span className="stat-label">Total Income</span>
+                  <span className="stat-value income">INR {summary.total_income.toFixed(2)}</span>
+                </div>
+                <div className="stat-card is-expense">
+                  <div className="stat-indicator expense">Ex</div>
+                  <span className="stat-label">Total Expenses</span>
+                  <span className="stat-value expense">INR {summary.total_expenses.toFixed(2)}</span>
+                </div>
+                <div className="stat-card is-balance">
+                  <div className="stat-indicator balance">Bl</div>
+                  <span className="stat-label">Balance</span>
+                  <span className="stat-value" style={{ color: summary.balance >= 0 ? 'var(--success)' : 'var(--error)' }}>
+                    INR {summary.balance.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              <RecentActivity />
+            </>
+          )}
+
+          {/* ═══ BUDGET ═══ */}
+          {section === 'budget' && (
+            <div className="section-card anim-fadeInUp">
+              <div className="section-header">
+                <span className="section-title"><span className="section-title-mark" /> Monthly Budgets</span>
+                <div className="section-actions">
+                  <button onClick={() => { setShowBudgetForm(!showBudgetForm); setSelectedBudget(null); }} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px', fontSize: 13 }}>
+                    {showBudgetForm ? 'Cancel' : '+ New Budget'}
+                  </button>
+                </div>
+              </div>
+              {showBudgetForm && (
+                <div className="form-card">
+                  <h3>{MONTHS[budgetCreate.month]} {budgetCreate.year}</h3>
+                  <form onSubmit={handleBudgetCreate}>
+                    <div className="form-row">
+                      <div className="form-group"><label>Month</label>
+                        <select name="month" value={budgetCreate.month} onChange={(e) => setBudgetCreate({ ...budgetCreate, month: e.target.value })} required>
+                          {MONTHS.slice(1).map((m, i) => (
+                            <option key={i + 1} value={i + 1} disabled={Number(budgetCreate.year) < currentYear() || (Number(budgetCreate.year) === currentYear() && i + 1 < currentMonth())}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group"><label>Year</label>
+                        <select name="year" value={budgetCreate.year} onChange={(e) => {
+                          const y = Number(e.target.value);
+                          const m = Number(budgetCreate.month);
+                          const month = y === currentYear() && m < currentMonth() ? currentMonth() : budgetCreate.month;
+                          setBudgetCreate({ ...budgetCreate, year: e.target.value, month });
+                        }} required>
+                          {[currentYear() - 1, currentYear(), currentYear() + 1].map((y) => (
+                            <option key={y} value={y} disabled={y < currentYear()}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="budget-alloc-grid">
+                      {EXPENSE_CATEGORIES.map((cat, idx) => (
+                        <div key={cat.value} className="budget-alloc-item">
+                          <span className="budget-cat-label" style={{ color: EXPENSE_COLORS[cat.value] }}>{cat.label}</span>
+                          <input type="number" value={budgetCreate.allocations[idx].amount} onChange={(e) => handleBudgetAllocChange(idx, e.target.value)} min="0" step="0.01" placeholder="0.00" className="edit-input" />
+                        </div>
+                      ))}
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ width: 'auto', margin: 0 }} disabled={creatingBudget}>{creatingBudget ? 'Creating...' : 'Create Budget'}</button>
+                  </form>
+                </div>
+              )}
+              {budgetLoading ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {[1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 160, borderRadius: 14 }} />)}
+                </div>
+              ) : !budgets.length ? (
+                <div className="empty-state"><div className="empty-state-mark">Bu</div><p>No budgets yet.</p></div>
+              ) : (
+                <div className="budget-grid">
+                  {budgets.map((b) => (
+                    <div key={b.id} className={`budget-card ${selectedBudget?.id === b.id ? 'active' : ''}`} onClick={() => setSelectedBudget(b)}>
+                      <div className="budget-card-header">
+                        <span className="budget-month">{MONTHS[b.month]} {b.year}</span>
+                        <button onClick={(e) => { e.stopPropagation(); handleBudgetDelete(b.id); }} className="btn-delete btn-delete-sm">Del</button>
+                      </div>
+                      <div className="budget-total">INR {parseFloat(b.total_amount).toFixed(2)}</div>
+                      <div className="budget-allocations">
+                        {b.allocations.map((a) => (
+                          <div key={a.id} className="budget-alloc-row">
+                            <span className="budget-alloc-cat" style={{ color: EXPENSE_COLORS[a.category] }}>{a.category}</span>
+                            <span className="budget-alloc-amt">INR {parseFloat(a.amount).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ SAVINGS ═══ */}
+          {section === 'savings' && (
+            <div className="section-card anim-fadeInUp">
+              <div className="section-header">
+                <span className="section-title"><span className="section-title-mark" /> Savings Goals</span>
+                <div className="section-actions">
+                  <button onClick={() => { setShowSavingsForm(!showSavingsForm); setEditSavingsId(null); setProgressGoalId(null); }} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px', fontSize: 13 }}>
+                    {showSavingsForm ? 'Cancel' : '+ New Goal'}
+                  </button>
+                </div>
+              </div>
+              {showSavingsForm && (
+                <div className="form-card">
+                  <h3>Create Goal</h3>
+                  <form onSubmit={handleSavingsCreate}>
+                    <div className="form-row">
+                      <div className="form-group"><label>Name</label><input type="text" value={savingsCreate.name} onChange={(e) => setSavingsCreate({ ...savingsCreate, name: e.target.value })} required placeholder="e.g. New Laptop" className="edit-input" /></div>
+                      <div className="form-group"><label>Target (INR)</label><input type="number" value={savingsCreate.target_amount} onChange={(e) => setSavingsCreate({ ...savingsCreate, target_amount: e.target.value })} required min="0.01" step="0.01" placeholder="0.00" className="edit-input" /></div>
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ width: 'auto', margin: 0 }} disabled={creatingSavings}>{creatingSavings ? 'Creating...' : 'Create Goal'}</button>
+                  </form>
+                </div>
+              )}
+              {savingsLoading ? (
+                <div className="savings-grid">{[1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 140, borderRadius: 14 }} />)}</div>
+              ) : !savingsGoals.length ? (
+                <div className="empty-state"><div className="empty-state-mark">Sv</div><p>No savings goals yet.</p></div>
+              ) : (
+                <div className="savings-grid">
+                  {savingsGoals.map((g) => (
+                    <div key={g.id} className="savings-card">
+                      {editSavingsId === g.id ? (
+                        <div className="edit-form-inline">
+                          <form onSubmit={handleSavingsUpdate}>
+                            <div className="edit-form-row" style={{ marginBottom: 8 }}>
+                              <input type="text" value={editSavingsData.name} onChange={(e) => setEditSavingsData({ ...editSavingsData, name: e.target.value })} required className="edit-input" placeholder="Name" />
+                              <input type="number" value={editSavingsData.target_amount} onChange={(e) => setEditSavingsData({ ...editSavingsData, target_amount: e.target.value })} required min="0.01" step="0.01" className="edit-input" placeholder="Target" />
+                            </div>
+                            <div className="edit-form-row">
+                              <button type="submit" className="btn-save" disabled={editingSavings}>{editingSavings ? 'Saving...' : 'Save'}</button>
+                              <button type="button" className="btn-cancel" onClick={() => setEditSavingsId(null)}>Cancel</button>
+                            </div>
+                          </form>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="savings-card-header">
+                            <div className="savings-card-name">
+                              {g.name}
+                              {g.is_completed && <span className="savings-badge">Done</span>}
+                            </div>
+                            <div className="item-actions">
+                              {!g.is_completed && <button onClick={() => { setProgressGoalId(progressGoalId === g.id ? null : g.id); setProgressAmount(''); }} className="btn-edit">Add</button>}
+                              {!g.is_completed && <button onClick={() => startEditSavings(g)} className="btn-edit">Edit</button>}
+                              <button onClick={() => handleSavingsDelete(g.id)} className="btn-delete">Del</button>
+                            </div>
+                          </div>
+                          <div className="savings-info">
+                            <span>INR {parseFloat(g.current_saved).toFixed(2)} / {parseFloat(g.target_amount).toFixed(2)}</span>
+                            <span>{g.progress_percent}%</span>
+                          </div>
+                          <div className="savings-bar">
+                            <div className={`savings-fill ${g.is_completed ? 'completed' : ''}`} style={{ width: `${g.progress_percent}%` }} />
+                          </div>
+                          {progressGoalId === g.id && (
+                            <div className="edit-form-row" style={{ marginTop: 8 }}>
+                              <input type="number" value={progressAmount} onChange={(e) => setProgressAmount(e.target.value)} min="0" step="0.01" placeholder="Amount" className="edit-input" style={{ maxWidth: 160 }} />
+                              <button className="btn-save" onClick={() => handleSavingsProgress(g.id)}>Update</button>
+                              <button className="btn-cancel" onClick={() => setProgressGoalId(null)}>Cancel</button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ INCOME ═══ */}
+          {section === 'income' && (
+            <div className="section-card anim-fadeInUp">
+              <div className="section-header">
+                <span className="section-title"><span className="section-title-mark" /> Income</span>
+                <div className="section-actions">
+                  <select value={filterIncSrc} onChange={(e) => setFilterIncSrc(e.target.value)} className="filter-select">
+                    <option value="">All Sources</option>
+                    {INCOME_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                  <button onClick={() => { setShowIncForm(!showIncForm); setEditIncId(null); }} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px', fontSize: 13 }}>
+                    {showIncForm ? 'Cancel' : '+ Add'}
+                  </button>
+                </div>
+              </div>
+              {showIncForm && (
+                <div className="form-card">
+                  <h3>New Income</h3>
+                  <form onSubmit={handleIncCreate}>
+                    <div className="form-row">
+                      <div className="form-group"><label>Amount (INR)</label><input type="number" name="amount" value={incCreate.amount} onChange={handleIncCreateChange} required min="0.01" step="0.01" placeholder="0.00" /></div>
+                      <div className="form-group"><label>Source</label><select name="source" value={incCreate.source} onChange={handleIncCreateChange} required>{INCOME_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
+                      <div className="form-group"><label>Date</label><input type="date" name="date" value={incCreate.date} onChange={handleIncCreateChange} required /></div>
+                    </div>
+                    <div className="form-group"><label>Description</label><input type="text" name="description" value={incCreate.description} onChange={handleIncCreateChange} placeholder="Details" /></div>
+                    <button type="submit" className="btn-primary" style={{ width: 'auto', margin: 0 }} disabled={creatingInc}>{creatingInc ? 'Adding...' : 'Add Income'}</button>
+                  </form>
+                </div>
+              )}
+              {incLoading ? (
+                <div className="item-list">{[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 52, borderRadius: 10 }} />)}</div>
+              ) : !incomes.length ? (
+                <div className="empty-state"><div className="empty-state-mark">In</div><p>No income records yet.</p></div>
+              ) : (
+                <div className="item-list">
+                  {incomes.map((inc) => (
+                    <div key={inc.id} className="list-item">
+                      {editIncId === inc.id ? (
+                        <div className="edit-form-inline">
+                          <form onSubmit={handleIncUpdate}>
+                            <div className="edit-form-row" style={{ marginBottom: 8 }}>
+                              <input type="number" name="amount" value={editIncData.amount} onChange={(e) => setEditIncData({ ...editIncData, amount: e.target.value })} required min="0.01" step="0.01" className="edit-input" />
+                              <select name="source" value={editIncData.source} onChange={(e) => setEditIncData({ ...editIncData, source: e.target.value })} required className="edit-select">{INCOME_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+                            </div>
+                            <div className="edit-form-row">
+                              <input type="text" name="description" value={editIncData.description} onChange={(e) => setEditIncData({ ...editIncData, description: e.target.value })} placeholder="Description" className="edit-input edit-input-desc" />
+                              <button type="submit" className="btn-save" disabled={editingInc}>{editingInc ? 'Saving...' : 'Save'}</button>
+                              <button type="button" className="btn-cancel" onClick={() => setEditIncId(null)}>Cancel</button>
+                            </div>
+                          </form>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="item-tag" style={{ backgroundColor: INCOME_COLORS[inc.source] }}>{inc.source.replace('_', ' ')}</div>
+                          <div className="item-content">
+                            <div className="item-title">{inc.description || 'No description'}</div>
+                            <div className="item-meta">{inc.date}</div>
+                          </div>
+                          <div className="item-amount income">INR {parseFloat(inc.amount).toFixed(2)}</div>
+                          <div className="item-actions">
+                            <button onClick={() => startEditInc(inc)} className="btn-edit">Edit</button>
+                            <button onClick={() => handleIncDelete(inc.id)} className="btn-delete">Del</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ EXPENSES ═══ */}
+          {section === 'expenses' && (
+            <div className="section-card anim-fadeInUp">
+              <div className="section-header">
+                <span className="section-title"><span className="section-title-mark" /> Expenses</span>
+                <div className="section-actions">
+                  <select value={filterExpCat} onChange={(e) => setFilterExpCat(e.target.value)} className="filter-select">
+                    <option value="">All Categories</option>
+                    {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                  <button onClick={() => { setShowExpForm(!showExpForm); setEditExpId(null); }} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px', fontSize: 13 }}>
+                    {showExpForm ? 'Cancel' : '+ Add'}
+                  </button>
+                </div>
+              </div>
+              {showExpForm && (
+                <div className="form-card">
+                  <h3>New Expense</h3>
+                  <form onSubmit={handleExpCreate}>
+                    <div className="form-row">
+                      <div className="form-group"><label>Amount (INR)</label><input type="number" name="amount" value={expCreate.amount} onChange={handleExpCreateChange} required min="0.01" step="0.01" placeholder="0.00" /></div>
+                      <div className="form-group"><label>Category</label><select name="category" value={expCreate.category} onChange={handleExpCreateChange} required>{EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select></div>
+                      <div className="form-group"><label>Date</label><input type="date" name="date" value={expCreate.date} onChange={handleExpCreateChange} required /></div>
+                    </div>
+                    <div className="form-group"><label>Description</label><input type="text" name="description" value={expCreate.description} onChange={handleExpCreateChange} placeholder="What for?" /></div>
+                    <button type="submit" className="btn-primary" style={{ width: 'auto', margin: 0 }} disabled={creatingExp}>{creatingExp ? 'Adding...' : 'Add Expense'}</button>
+                  </form>
+                </div>
+              )}
+              {expLoading ? (
+                <div className="item-list">{[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 52, borderRadius: 10 }} />)}</div>
+              ) : !expenses.length ? (
+                <div className="empty-state"><div className="empty-state-mark">Ex</div><p>No expenses yet.</p></div>
+              ) : (
+                <div className="item-list">
+                  {expenses.map((exp) => (
+                    <div key={exp.id} className="list-item">
+                      {editExpId === exp.id ? (
+                        <div className="edit-form-inline">
+                          <form onSubmit={handleExpUpdate}>
+                            <div className="edit-form-row" style={{ marginBottom: 8 }}>
+                              <input type="number" name="amount" value={editExpData.amount} onChange={(e) => setEditExpData({ ...editExpData, amount: e.target.value })} required min="0.01" step="0.01" className="edit-input" />
+                              <select name="category" value={editExpData.category} onChange={(e) => setEditExpData({ ...editExpData, category: e.target.value })} required className="edit-select">{EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
+                            </div>
+                            <div className="edit-form-row">
+                              <input type="text" name="description" value={editExpData.description} onChange={(e) => setEditExpData({ ...editExpData, description: e.target.value })} placeholder="Description" className="edit-input edit-input-desc" />
+                              <button type="submit" className="btn-save" disabled={editingExp}>{editingExp ? 'Saving...' : 'Save'}</button>
+                              <button type="button" className="btn-cancel" onClick={() => setEditExpId(null)}>Cancel</button>
+                            </div>
+                          </form>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="item-tag" style={{ backgroundColor: EXPENSE_COLORS[exp.category] }}>{exp.category}</div>
+                          <div className="item-content">
+                            <div className="item-title">{exp.description || 'No description'}</div>
+                            <div className="item-meta">{exp.date}</div>
+                          </div>
+                          <div className="item-amount">INR {parseFloat(exp.amount).toFixed(2)}</div>
+                          <div className="item-actions">
+                            <button onClick={() => startEditExp(exp)} className="btn-edit">Edit</button>
+                            <button onClick={() => handleExpDelete(exp.id)} className="btn-delete">Del</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ ANALYTICS ═══ */}
+          {section === 'analytics' && <AnalyticsSection />}
+
+          {/* ═══ REPORTS ═══ */}
+          {section === 'reports' && (
+            <div className="section-card anim-fadeInUp">
+              <div className="section-header">
+                <span className="section-title"><span className="section-title-mark" /> Monthly Reports</span>
+                <div className="section-actions">
+                  <select value={reportMonth} onChange={(e) => { const m = Number(e.target.value); setReportMonth(m); fetchReport(m, reportYear); }} className="filter-select">
+                    {MONTHS.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                  </select>
+                  <select value={reportYear} onChange={(e) => { const y = Number(e.target.value); setReportYear(y); fetchReport(reportMonth, y); }} className="filter-select">
+                    <option value={2025}>2025</option><option value={2026}>2026</option><option value={2027}>2027</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="report-downloads">
+                <button className="btn-report" onClick={() => downloadReport('pdf')} disabled={!!downloading || reportLoading}>
+                  {downloading === 'pdf' ? 'Downloading…' : '⬇ PDF'}
+                </button>
+                <button className="btn-report" onClick={() => downloadReport('excel')} disabled={!!downloading || reportLoading}>
+                  {downloading === 'excel' ? 'Downloading…' : '⬇ Excel'}
+                </button>
+                <button className="btn-report" onClick={() => downloadReport('csv')} disabled={!!downloading || reportLoading}>
+                  {downloading === 'csv' ? 'Downloading…' : '⬇ CSV'}
+                </button>
+                <button className="btn-report btn-report-ghost" onClick={() => fetchReport()} disabled={reportLoading || !!downloading}>
+                  {reportLoading ? 'Loading…' : 'Refresh'}
+                </button>
+              </div>
+
+              {reportError && <div className="report-error">{reportError}</div>}
+
+              {reportLoading ? (
+                <div className="item-list">{[1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 52, borderRadius: 10 }} />)}</div>
+              ) : reportData ? (
+                <>
+                  <div className="stats-grid" style={{ marginTop: 8 }}>
+                    <div className="stat-card is-income">
+                      <div className="stat-indicator income">In</div>
+                      <span className="stat-label">Income</span>
+                      <span className="stat-value income">INR {Number(reportData.income?.total ?? 0).toFixed(2)}</span>
+                    </div>
+                    <div className="stat-card is-expense">
+                      <div className="stat-indicator expense">Ex</div>
+                      <span className="stat-label">Expenses</span>
+                      <span className="stat-value expense">INR {Number(reportData.expenses?.total ?? 0).toFixed(2)}</span>
+                    </div>
+                    <div className="stat-card is-balance">
+                      <div className="stat-indicator balance">Bl</div>
+                      <span className="stat-label">Net Savings</span>
+                      <span className="stat-value" style={{ color: reportData.net_savings >= 0 ? 'var(--success)' : 'var(--error)' }}>
+                        INR {Number(reportData.net_savings ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="report-meta">
+                    {MONTHS[reportMonth]} {reportData.year} · Savings rate {Number(reportData.savings_rate_percent ?? 0).toFixed(1)}% · {reportData.transaction_count ?? 0} transactions
+                  </div>
+
+                  {reportData.expenses?.breakdown?.length > 0 && (
+                    <div className="report-block">
+                      <h4>Expenses by Category</h4>
+                      <div className="item-list">
+                        {reportData.expenses.breakdown.map((c) => (
+                          <div key={c.label} className="list-item">
+                            <div className="item-tag" style={{ backgroundColor: EXPENSE_COLORS[c.label] || 'var(--primary)' }}>{c.label}</div>
+                            <div className="item-content">
+                              <div className="item-title">INR {Number(c.total).toFixed(2)}</div>
+                              <div className="item-meta">{c.count} transactions · {c.percent}% of expenses</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {reportData.income?.breakdown?.length > 0 && (
+                    <div className="report-block">
+                      <h4>Income Sources</h4>
+                      <div className="item-list">
+                        {reportData.income.breakdown.map((c) => (
+                          <div key={c.label} className="list-item">
+                            <div className="item-tag" style={{ backgroundColor: INCOME_COLORS[c.label] || 'var(--success)' }}>{c.label}</div>
+                            <div className="item-content">
+                              <div className="item-title">INR {Number(c.total).toFixed(2)}</div>
+                              <div className="item-meta">{c.count} transactions · {c.percent}% of income</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {reportData.budget?.allocations?.length > 0 && (
+                    <div className="report-block">
+                      <h4>Budget Utilization</h4>
+                      <div className="item-list">
+                        {reportData.budget.allocations.map((b) => (
+                          <div key={b.category} className="list-item">
+                            <div className="item-tag" style={{ backgroundColor: EXPENSE_COLORS[b.category] || 'var(--primary)' }}>{b.category}</div>
+                            <div className="item-content">
+                              <div className="item-title">{Number(b.utilization_percent).toFixed(1)}% used</div>
+                              <div className="item-meta">INR {Number(b.spent).toFixed(2)} of {Number(b.budgeted).toFixed(2)}</div>
+                              <div className="savings-bar" style={{ marginTop: 6 }}>
+                                <div className={`savings-fill ${b.utilization_percent >= 100 ? 'completed' : ''}`} style={{ width: `${Math.min(Number(b.utilization_percent), 100)}%`, backgroundColor: b.utilization_percent >= 100 ? 'var(--error)' : undefined }} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="empty-state"><div className="empty-state-mark">Rp</div><p>No report loaded.</p></div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
