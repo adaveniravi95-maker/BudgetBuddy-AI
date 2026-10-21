@@ -11,3 +11,75 @@ frontend/dist/
 # OS / VS Code files
 .vscode/
 .DS_Store
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Build output
+frontend/dist/
+
+# Environment
+.env
+.env.local
+
+# Databases
+*.sqlite3
+test_*.db
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python test/cache
+.pytest_cache/
+*.pyo
+
+# Logs
+*.log
+dev.log
+.vercel
+.env*
+!.env.example
+# Python cache
+__pycache__/
+*.pyc
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Frontend build files
+node_modules/
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+.env
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+frontend/node_modules/
+node_modules/
+frontend/dist/

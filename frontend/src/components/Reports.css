@@ -1,0 +1,84 @@
+/* BudgetBuddy Reports page additions/fixes */
+
+.reports-mode-switch {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    margin: 0 0 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 4px 14px rgba(0,0,0,.04);
+}
+
+.reports-mode-switch button {
+    border: 0;
+    border-radius: 9px;
+    padding: 9px 18px;
+    background: transparent;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.reports-mode-switch button.active {
+    background: #6c5ce7;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(108,92,231,.22);
+}
+
+.report-generate-controls input[type="number"] {
+    width: 120px;
+    box-sizing: border-box;
+}
+
+/* Prevent report numbers from breaking into multiple lines. */
+.report-detail-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-detail-box strong {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.report-details-actions {
+    flex-wrap: wrap;
+}
+
+.report-details-actions button {
+    min-width: 150px;
+}
+
+@media (max-width: 1100px) {
+    .report-detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .reports-mode-switch {
+        width: 100%;
+    }
+
+    .reports-mode-switch button {
+        flex: 1;
+    }
+
+    .report-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .report-generate-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .report-generate-controls input[type="number"],
+    .report-generate-controls input[type="month"] {
+        min-width: 0;
+        flex: 1;
+    }
+}

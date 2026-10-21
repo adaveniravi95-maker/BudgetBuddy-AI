@@ -1,4 +1,7 @@
 {
+  "name": "budgetbuddy-frontend",
+  "private": true,
+  "version": "1.0.0",
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
@@ -6,6 +9,31 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.20.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "vite": "^8.3.0"
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-router-dom": "latest",
+    "recharts": "^3.10.1",
+    "vite": "latest"
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -17,6 +45,9 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.3",
     "recharts": "^3.10.1"
   },
   "devDependencies": {
