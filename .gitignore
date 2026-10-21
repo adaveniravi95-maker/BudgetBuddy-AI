@@ -28,3 +28,11 @@ build/
 
 # OS files
 .DS_Store
+.env
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+frontend/node_modules/
+node_modules/
+frontend/dist/
