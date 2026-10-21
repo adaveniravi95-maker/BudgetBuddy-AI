@@ -1,0 +1,113 @@
+.dashboard-container {
+  max-width: 800px;
+  margin: 20px auto;
+  font-family: Arial, sans-serif;
+  padding: 0 15px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.card {
+  padding: 15px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+}
+
+.card.income h3 { color: #2e7d32; }
+.card.expense h3 { color: #c62828; }
+.card.balance h3 { color: #1565c0; }
+
+.budget-box {
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 18px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+}
+
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 12px;
+  background: #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #4caf50;
+  transition: width 0.3s ease;
+}
+
+.progress-bar-fill.danger {
+  background: #e53935;
+}
+
+.form-box, .history-box {
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+}
+
+.type-toggle {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.type-toggle button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  background: #f1f1f1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.type-toggle button.active.expense-btn { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
+.type-toggle button.active.income-btn { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+
+.form-box input {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.history-box ul { list-style: none; padding: 0; }
+.history-box li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.history-box li.income .amount { color: #2e7d32; font-weight: bold; }
+.history-box li.expense .amount { color: #c62828; font-weight: bold; }

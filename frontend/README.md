@@ -1,3 +1,5 @@
+# React + Vite
+
 # BudgetBuddy Frontend
 
 React + Vite skeleton for Milestone 1 and the Milestone 2 dashboard foundation.
