@@ -36,3 +36,11 @@ dev.log
 .vercel
 .env*
 !.env.example
+.env
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+frontend/node_modules/
+node_modules/
+frontend/dist/
