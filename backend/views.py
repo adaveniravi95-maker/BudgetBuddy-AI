@@ -1,0 +1,1 @@
+# Views are managed inside api/views.py
