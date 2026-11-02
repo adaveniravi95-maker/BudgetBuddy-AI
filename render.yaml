@@ -27,8 +27,6 @@ services:
         fromDatabase:
           name: budgetbuddy-db
           property: connectionString
-      - key: ALLOWED_HOSTS
-        value: budgetbuddy-api.onrender.com
       - key: CORS_ALLOWED_ORIGINS
         value: https://budgetbuddy-frontend.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
