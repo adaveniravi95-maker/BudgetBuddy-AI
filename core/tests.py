@@ -173,7 +173,13 @@ class ProtectedEndpointAndDataIsolationTests(APITestCase):
 
     def test_unauthenticated_request_is_rejected(self):
         """Endpoints reject unauthenticated requests with 401"""
-        endpoints = ['/api/auth/me/', '/api/expenses/', '/api/incomes/', '/api/budgets/']
+        endpoints = [
+            '/api/auth/me/',
+            '/api/auth/change-password/',
+            '/api/expenses/',
+            '/api/incomes/',
+            '/api/budgets/',
+        ]
         for url in endpoints:
             response = self.client.get(url)
             self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, f"Failed for {url}")
@@ -201,6 +207,72 @@ class ProtectedEndpointAndDataIsolationTests(APITestCase):
         self.assertEqual(response.data['username'], 'user_a')
         self.assertEqual(response.data['email'], 'a@example.com')
         self.assertEqual(response.data['role'], 'student')
+
+    def test_profile_can_be_updated_without_changing_protected_fields(self):
+        self.authenticate(self.user_a)
+        response = self.client.patch('/api/auth/me/', {
+            'email': 'new-a@example.com',
+            'first_name': 'Alice',
+            'last_name': 'Example',
+            'phone': '1234567890',
+            'college': 'Example College',
+            'username': 'different_user',
+            'role': 'admin',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], 'new-a@example.com')
+        self.assertEqual(response.data['first_name'], 'Alice')
+        self.assertEqual(response.data['phone'], '1234567890')
+        self.assertEqual(response.data['college'], 'Example College')
+        self.assertEqual(response.data['username'], 'user_a')
+        self.assertEqual(response.data['role'], 'student')
+
+        self.user_a.refresh_from_db()
+        self.assertEqual(self.user_a.username, 'user_a')
+        self.assertEqual(self.user_a.profile.role, 'student')
+
+    def test_profile_rejects_an_email_used_by_another_user(self):
+        self.authenticate(self.user_a)
+        response = self.client.patch(
+            '/api/auth/me/',
+            {'email': self.user_b.email.upper()},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', response.data)
+
+    def test_password_can_be_changed_with_current_password(self):
+        self.authenticate(self.user_a)
+        response = self.client.post('/api/auth/change-password/', {
+            'current_password': 'Password123!',
+            'new_password': 'NewSecurePassword456!',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user_a.refresh_from_db()
+        self.assertTrue(self.user_a.check_password('NewSecurePassword456!'))
+
+    def test_password_change_rejects_incorrect_current_password(self):
+        self.authenticate(self.user_a)
+        response = self.client.post('/api/auth/change-password/', {
+            'current_password': 'incorrect',
+            'new_password': 'NewSecurePassword456!',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('current_password', response.data)
+
+    def test_password_change_enforces_configured_password_validation(self):
+        self.authenticate(self.user_a)
+        response = self.client.post('/api/auth/change-password/', {
+            'current_password': 'Password123!',
+            'new_password': 'password',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('new_password', response.data)
 
     def test_user_data_isolation(self):
         """User A can only view their own expenses and not User B's"""

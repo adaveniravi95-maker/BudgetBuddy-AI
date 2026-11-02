@@ -371,7 +371,12 @@ const Navbar = () => {
                 )}
               </div>
 
-              <div className="user-profile-badge">
+              <Link
+                to="/profile"
+                className="user-profile-badge"
+                aria-label="Open profile settings"
+                title="Profile settings"
+              >
                 <div className="avatar-circle">
                   <UserIcon size={16} />
                 </div>
@@ -386,7 +391,7 @@ const Navbar = () => {
                     {user?.role || 'Student'}
                   </span>
                 </div>
-              </div>
+              </Link>
 
               <button onClick={handleLogout} className="btn-logout" title="Log Out">
                 <LogOut size={16} />

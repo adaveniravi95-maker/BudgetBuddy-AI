@@ -5156,3 +5156,190 @@ body {
     flex: 1 1 auto;
   }
 }
+
+.user-profile-badge {
+  color: inherit;
+  text-decoration: none;
+}
+
+.user-profile-badge:hover {
+  border-color: var(--border-focus);
+}
+
+.profile-settings-page {
+  width: min(100% - 2rem, 1100px);
+  margin: 2rem auto;
+  color: var(--text-main);
+}
+
+.profile-settings-page .profile-hero,
+.profile-settings-page .profile-main-card,
+.profile-settings-page .profile-side-card,
+.profile-settings-page .profile-security-card,
+.profile-settings-page .profile-password-card {
+  color: var(--text-main);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-settings-page .profile-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 2rem;
+  margin-bottom: 1.25rem;
+}
+
+.profile-settings-page .profile-hero h1,
+.profile-settings-page .profile-main-card h2,
+.profile-settings-page .profile-side-card h2,
+.profile-settings-page .profile-security-card h2,
+.profile-settings-page .profile-password-card h2 {
+  color: var(--text-main);
+}
+
+.profile-settings-page .profile-hero p,
+.profile-settings-page .profile-side-card p,
+.profile-settings-page .profile-security-card p,
+.profile-settings-page .profile-password-card p {
+  color: var(--text-muted);
+}
+
+.profile-settings-page .profile-back-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.profile-settings-page .profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.profile-settings-page .profile-main-card,
+.profile-settings-page .profile-side-card,
+.profile-settings-page .profile-security-card,
+.profile-settings-page .profile-password-card {
+  padding: 1.5rem;
+}
+
+.profile-settings-page .profile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.profile-settings-page .profile-card-header h2,
+.profile-settings-page .profile-side-card h2,
+.profile-settings-page .profile-security-card h2,
+.profile-settings-page .profile-password-card h2 {
+  margin-top: 0;
+}
+
+.profile-settings-page .profile-card-header p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+}
+
+.profile-settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.profile-settings-form .form-group input[readonly] {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+}
+
+.profile-settings-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.profile-role-label {
+  color: var(--text-muted);
+}
+
+.profile-feedback {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+}
+
+.profile-feedback-error {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.profile-feedback-success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.profile-settings-page .profile-security-card {
+  margin-bottom: 1.25rem;
+}
+
+.profile-settings-page .security-items {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.profile-settings-page .security-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.profile-settings-page .security-item small {
+  display: block;
+  color: var(--text-muted);
+}
+
+.profile-settings-page .profile-error,
+.profile-settings-page .profile-loading {
+  padding: 2rem;
+  color: var(--text-main);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+@media (max-width: 700px) {
+  .profile-settings-page .profile-grid,
+  .profile-settings-form {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-settings-page .profile-hero {
+    padding: 1.25rem;
+  }
+
+  .profile-settings-page .profile-main-card,
+  .profile-settings-page .profile-side-card,
+  .profile-settings-page .profile-security-card,
+  .profile-settings-page .profile-password-card {
+    padding: 1rem;
+  }
+
+  .profile-settings-page .profile-card-header {
+    flex-direction: column;
+  }
+
+  .profile-settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

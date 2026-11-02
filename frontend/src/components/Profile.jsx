@@ -1,28 +1,114 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api";
+import { Link } from "react-router-dom";
+import { authAPI } from "../api/api";
 
 function Profile() {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [profileError, setProfileError] = useState("");
+    const [profileMessage, setProfileMessage] = useState("");
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [password, setPassword] = useState({
+        current_password: "",
+        new_password: "",
+        confirm_password: "",
+    });
+    const [passwordError, setPasswordError] = useState("");
+    const [passwordMessage, setPasswordMessage] = useState("");
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
 
     useEffect(() => {
-        loadProfile();
+        let isMounted = true;
+
+        authAPI.getProfile()
+            .then(({ data }) => {
+                if (isMounted) setUser(data);
+            })
+            .catch((err) => {
+                if (isMounted) {
+                    setError(
+                        err.response?.data?.detail
+                        || "Unable to load your profile. Please try again."
+                    );
+                }
+            })
+            .finally(() => {
+                if (isMounted) setLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
-    async function loadProfile() {
-        try {
-            setLoading(true);
-            setError("");
+    const handleProfileChange = (event) => {
+        const { name, value } = event.target;
+        setUser((currentUser) => ({ ...currentUser, [name]: value }));
+    };
 
-            const data = await api("/auth/me");
+    const handleSaveProfile = async (event) => {
+        event.preventDefault();
+        setProfileError("");
+        setProfileMessage("");
+        setIsSavingProfile(true);
+
+        try {
+            const { data } = await authAPI.updateProfile({
+                first_name: user.first_name,
+                last_name: user.last_name,
+                email: user.email,
+                phone: user.phone,
+                college: user.college,
+            });
             setUser(data);
+            setProfileMessage("Profile updated successfully.");
         } catch (err) {
-            setError(err.message || "Unable to load profile.");
+            const responseData = err.response?.data;
+            const detail = responseData?.detail
+                || Object.entries(responseData || {})
+                    .map(([field, messages]) => `${field}: ${[].concat(messages).join(" ")}`)
+                    .join(" ");
+            setProfileError(detail || "Unable to save your profile. Please try again.");
         } finally {
-            setLoading(false);
+            setIsSavingProfile(false);
         }
-    }
+    };
+
+    const handlePasswordChange = (event) => {
+        const { name, value } = event.target;
+        setPassword((currentPassword) => ({ ...currentPassword, [name]: value }));
+    };
+
+    const handleChangePassword = async (event) => {
+        event.preventDefault();
+        setPasswordError("");
+        setPasswordMessage("");
+
+        if (password.new_password !== password.confirm_password) {
+            setPasswordError("New passwords do not match.");
+            return;
+        }
+
+        setIsChangingPassword(true);
+        try {
+            await authAPI.changePassword({
+                current_password: password.current_password,
+                new_password: password.new_password,
+            });
+            setPassword({ current_password: "", new_password: "", confirm_password: "" });
+            setPasswordMessage("Password updated successfully.");
+        } catch (err) {
+            const responseData = err.response?.data;
+            const detail = responseData?.detail
+                || Object.entries(responseData || {})
+                    .map(([field, messages]) => `${field}: ${[].concat(messages).join(" ")}`)
+                    .join(" ");
+            setPasswordError(detail || "Unable to change your password. Please try again.");
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -43,20 +129,16 @@ function Profile() {
                     <div className="profile-error-icon">⚠️</div>
                     <h2>Unable to load profile</h2>
                     <p>{error}</p>
-
-                    <button
-                        className="profile-retry-btn"
-                        onClick={loadProfile}
-                    >
-                        Try Again
-                    </button>
+                    <Link to="/dashboard" className="btn-primary">Back to dashboard</Link>
                 </div>
             </div>
         );
     }
 
+    const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
+
     return (
-        <div className="profile-page">
+        <div className="profile-page profile-settings-page">
 
             <section className="profile-hero">
                 <div className="profile-hero-content">
@@ -67,13 +149,14 @@ function Profile() {
                     <h1>My Profile</h1>
 
                     <p>
-                        Manage and view your BudgetBuddy account information.
+                        Manage your personal information and account security.
                     </p>
+                    <Link to="/dashboard" className="profile-back-link">Back to dashboard</Link>
                 </div>
 
                 <div className="profile-avatar">
-                    {user?.full_name
-                        ? user.full_name.charAt(0).toUpperCase()
+                    {fullName
+                        ? fullName.charAt(0).toUpperCase()
                         : "U"}
                 </div>
             </section>
@@ -85,7 +168,7 @@ function Profile() {
                     <div className="profile-card-header">
                         <div>
                             <h2>Personal Information</h2>
-                            <p>Your registered BudgetBuddy account details.</p>
+                            <p>Update your contact details and student information.</p>
                         </div>
 
                         <span className="profile-status">
@@ -93,76 +176,43 @@ function Profile() {
                         </span>
                     </div>
 
-                    <div className="profile-info-grid">
+                    {profileError && <p className="profile-feedback profile-feedback-error" role="alert">{profileError}</p>}
+                    {profileMessage && <p className="profile-feedback profile-feedback-success" role="status">{profileMessage}</p>}
 
-                        <div className="profile-info-item">
-                            <span className="profile-info-label">
-                                Full Name
-                            </span>
-
-                            <div className="profile-info-value">
-                                <span className="profile-info-icon">
-                                    👤
-                                </span>
-
-                                <strong>
-                                    {user?.full_name || "Not available"}
-                                </strong>
-                            </div>
+                    <form className="profile-settings-form" onSubmit={handleSaveProfile}>
+                        <div className="form-group">
+                            <label htmlFor="profile-username">Username</label>
+                            <input id="profile-username" value={user?.username || ""} readOnly />
                         </div>
-
-                        <div className="profile-info-item">
-                            <span className="profile-info-label">
-                                Email Address
-                            </span>
-
-                            <div className="profile-info-value">
-                                <span className="profile-info-icon">
-                                    ✉️
-                                </span>
-
-                                <strong>
-                                    {user?.email || "Not available"}
-                                </strong>
-                            </div>
+                        <div className="form-group">
+                            <label htmlFor="profile-email">Email address</label>
+                            <input id="profile-email" name="email" type="email" value={user?.email || ""} onChange={handleProfileChange} required />
                         </div>
-
-                        <div className="profile-info-item">
-                            <span className="profile-info-label">
-                                Account ID
-                            </span>
-
-                            <div className="profile-info-value">
-                                <span className="profile-info-icon">
-                                    🆔
-                                </span>
-
-                                <strong>
-                                    #{user?.id ?? "N/A"}
-                                </strong>
-                            </div>
+                        <div className="form-group">
+                            <label htmlFor="profile-first-name">First name</label>
+                            <input id="profile-first-name" name="first_name" value={user?.first_name || ""} onChange={handleProfileChange} maxLength={150} />
                         </div>
-
-                        <div className="profile-info-item">
-                            <span className="profile-info-label">
-                                Account Role
-                            </span>
-
-                            <div className="profile-info-value">
-                                <span className="profile-info-icon">
-                                    🎓
-                                </span>
-
-                                <strong>
-                                    {user?.role
-                                        ? user.role.charAt(0).toUpperCase() +
-                                          user.role.slice(1)
-                                        : "Student"}
-                                </strong>
-                            </div>
+                        <div className="form-group">
+                            <label htmlFor="profile-last-name">Last name</label>
+                            <input id="profile-last-name" name="last_name" value={user?.last_name || ""} onChange={handleProfileChange} maxLength={150} />
                         </div>
-
-                    </div>
+                        <div className="form-group">
+                            <label htmlFor="profile-phone">Phone</label>
+                            <input id="profile-phone" name="phone" type="tel" value={user?.phone || ""} onChange={handleProfileChange} maxLength={15} />
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="profile-college">College</label>
+                            <input id="profile-college" name="college" value={user?.college || ""} onChange={handleProfileChange} maxLength={150} />
+                        </div>
+                        <div className="profile-settings-actions">
+                            <span className="profile-role-label">
+                                Account role: <strong>{user?.role || "student"}</strong>
+                            </span>
+                            <button className="btn-primary" type="submit" disabled={isSavingProfile}>
+                                {isSavingProfile ? "Saving..." : "Save profile"}
+                            </button>
+                        </div>
+                    </form>
                 </div>
 
                 <div className="profile-side-card">
@@ -171,12 +221,12 @@ function Profile() {
                         🎓
                     </div>
 
-                    <h2>Student Account</h2>
+                    <h2>{user?.role === "admin" ? "Administrator Account" : "Student Account"}</h2>
 
                     <p>
-                        BudgetBuddy is designed to help students manage
-                        income, expenses, budgets and savings goals in one
-                        place.
+                        {user?.role === "admin"
+                            ? "This account has the administrator role configured for BudgetBuddy."
+                            : "BudgetBuddy helps students manage income, expenses, budgets and savings goals in one place."}
                     </p>
 
                     <div className="profile-role-box">
@@ -247,7 +297,33 @@ function Profile() {
 
             </section>
 
-           
+            <section className="profile-password-card">
+                <div>
+                    <h2>Change password</h2>
+                    <p>Enter your current password to set a new one.</p>
+                </div>
+                {passwordError && <p className="profile-feedback profile-feedback-error" role="alert">{passwordError}</p>}
+                {passwordMessage && <p className="profile-feedback profile-feedback-success" role="status">{passwordMessage}</p>}
+                <form className="profile-settings-form" onSubmit={handleChangePassword}>
+                    <div className="form-group">
+                        <label htmlFor="current-password">Current password</label>
+                        <input id="current-password" name="current_password" type="password" autoComplete="current-password" value={password.current_password} onChange={handlePasswordChange} required />
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="new-password">New password</label>
+                        <input id="new-password" name="new_password" type="password" autoComplete="new-password" value={password.new_password} onChange={handlePasswordChange} required />
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="confirm-password">Confirm new password</label>
+                        <input id="confirm-password" name="confirm_password" type="password" autoComplete="new-password" value={password.confirm_password} onChange={handlePasswordChange} required />
+                    </div>
+                    <div className="profile-settings-actions">
+                        <button className="btn-primary" type="submit" disabled={isChangingPassword}>
+                            {isChangingPassword ? "Updating..." : "Update password"}
+                        </button>
+                    </div>
+                </form>
+            </section>
 
         </div>
     );

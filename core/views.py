@@ -28,6 +28,7 @@ from .reports import (
 from .upi_import import mark_duplicate_transactions, parse_upi_csv, serialize_preview
 from .serializers import (
     CustomTokenObtainPairSerializer,
+    ChangePasswordSerializer,
     ExpenseSerializer,
     RegisterSerializer,
     UserProfileSerializer,
@@ -79,6 +80,34 @@ class UserProfileView(APIView):
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        serializer = UserProfileSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save(update_fields=['password'])
+        return Response(
+            {'detail': 'Password updated successfully.'},
+            status=status.HTTP_200_OK,
+        )
 
 
 class HealthCheckView(APIView):
